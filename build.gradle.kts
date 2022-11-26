@@ -29,10 +29,3 @@ tasks.withType<KotlinCompile> {
 application {
     mainClass.set("dev.mr3n.morugrok.MainKt")
 }
-
-configure<ReleaseExtension> {
-    ignoredSnapshotDependencies.set(listOf("net.researchgate:gradle-release"))
-    with(git) {
-        requireBranch.set("master")
-    }
-}
