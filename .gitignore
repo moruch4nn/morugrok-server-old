@@ -1,0 +1,7 @@
+# プロジェクトの除外パス
+/.gradle/
+/build/
+/build/classes/kotlin/main/
+/gradlew
+/gradlew.bat
+/gradle
