@@ -30,33 +30,31 @@ class DaemonSocketServer(val port: Int): Thread() {
         val outputStream = socket.getOutputStream()
         val inputStream = socket.getInputStream()
         val connections = mutableListOf<PublicTCPServer>()
-            get() = field.filterNot { it.closed }.toMutableList()
 
         /**
          * サーバー関連のすべてのコネクションを閉じる
          */
         fun close() {
-            outputStream.close()
-            inputStream.close()
-            socket.close()
-            connections.forEach { it.close() }
+            connections.forEach { println(it.port);it.close() }
             CONNECTIONS.remove(this)
             LOGGER.info("サーバー(${socket.inetAddress.hostAddress})との接続を切断しました。")
-            this.interrupt()
+            try { outputStream.close() } catch(_: Exception) {}
+            try { inputStream.close() } catch(_: Exception) {}
+            try { socket.close() } catch(_: Exception) {}
         }
 
         override fun run() {
             val byteArray = ByteArray(4)
             DataInputStream(inputStream).readFully(byteArray)
             val byteBuffer = ByteBuffer.wrap(byteArray)
-            val requestPort = byteBuffer.getInt(0).toInt()
+            val requestPort = byteBuffer.getInt(0)
             val port = if(AVAILABLE_PORTS.contains(requestPort)) requestPort else AVAILABLE_PORTS.random()
             LOGGER.info("新しくサーバー(${socket.inetAddress.hostAddress})との接続を確立しました。現在はクライアントからの新規接続を待機しています。")
             // 公開サーバー(クライアントがアクセスするサーバー)と非公開トンネルサーバー(サーバーとS3O1サービスをつなぐトンネル)を開く
             connections.add(PublicTCPServer(port,outputStream))
             val watchDogStream = socket.getInputStream()
             while(true) {
-                try { watchDogStream.read();sleep(1000) } catch(e: IOException) { close();break }
+                try { watchDogStream.read();sleep(1000) } catch(e: Exception) { close();break }
             }
         }
 
@@ -66,7 +64,7 @@ class DaemonSocketServer(val port: Int): Thread() {
     companion object {
         val LOGGER: Logger = Logger.getLogger("morugrok-server")
         val CONNECTIONS: MutableList<TCPConnection> = mutableListOf()
-        val AVAILABLE_PORTS = (10000..30000).toMutableList()
+        val AVAILABLE_PORTS = (10000..60000).toMutableList()
         val DEFAULT_BUFFER_SIZE = 3000000
     }
     init { this.start() }
@@ -83,7 +81,7 @@ class PrivateTunnelServer(val port: Int) {
 
     fun close() {
         this.closed = true
-        serverSocket.close()
+        try { serverSocket.close() } catch(_: Exception) {}
         DaemonSocketServer.AVAILABLE_PORTS.add(port)
     }
 
@@ -118,10 +116,10 @@ class PublicTCPServer(val port: Int, val outputStream: OutputStream): Thread() {
     fun close() {
         this.closed = true
         privateTunnelServer.close()
+        try { serverSocket.close() } catch(_: Exception) {}
         connectionSockets.forEach { it.close() }
         DaemonSocketServer.AVAILABLE_PORTS.add(port)
         DaemonSocketServer.LOGGER.info("公開サーバーを停止しました。")
-        this.interrupt()
     }
 
     init {
@@ -140,12 +138,17 @@ class PublicTCPServer(val port: Int, val outputStream: OutputStream): Thread() {
         while(true) {
             // クライアントからの接続が来たら許可する
             val clientSocket = this.serverSocket.accept()
+
+            // クライアントのIPアドレス
+            val address = clientSocket.inetAddress.hostAddress
             // >>> サーバーに新しいトンネルを作成するリクエストを送信 >>>
             val byteBuffer = ByteBuffer.allocate(256)
             byteBuffer.put(1)
             byteBuffer.putInt(1,privateTunnelServer.port)
+            address.split(".").map { it.toInt()-128 }.map { it.toByte() }.forEachIndexed { index, byte -> byteBuffer.put(128+index,byte) }
             outputStream.write(byteBuffer.array())
             // <<< サーバーに新しいトンネルを作成するリクエストを送信 <<<
+
             // トンネルサーバー作成のリクエストを許可する
             val serverSocket = this.privateTunnelServer.accept()
             // >>>>
@@ -161,10 +164,9 @@ class PublicTCPServer(val port: Int, val outputStream: OutputStream): Thread() {
             private set
 
         fun close() {
-            if(!receive.isClosed) { receive.close() }
-            if(!send.isClosed) { send.close() }
+            try { receive.close() } catch(_: Exception) {}
+            try { send.close() } catch(_: Exception) {}
             closed = true
-            this.interrupt()
         }
 
         override fun run() {

@@ -16,7 +16,9 @@ repositories {
 
 dependencies {
     testImplementation(kotlin("test"))
+    implementation("org.jetbrains.kotlin:kotlin-stdlib")
 }
+
 
 tasks.test {
     useJUnitPlatform()
@@ -31,6 +33,7 @@ application {
 }
 
 tasks.withType<Jar> {
+    from(configurations.compileClasspath.get().map { if (it.isDirectory()) it else zipTree(it) })
     manifest {
         attributes["Main-Class"] = "dev.mr3n.morugrok.MainKt"
     }
