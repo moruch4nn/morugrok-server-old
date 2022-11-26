@@ -29,3 +29,9 @@ tasks.withType<KotlinCompile> {
 application {
     mainClass.set("dev.mr3n.morugrok.MainKt")
 }
+
+tasks.withType<Jar> {
+    manifest {
+        attributes["Main-Class"] = "dev.mr3n.morugrok.MainKt"
+    }
+}
